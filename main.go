@@ -67,6 +67,14 @@ func main() {
 
 	fileServer := http.FileServer(http.Dir(webDir))
 	r.Handle("/*", fileServer)
+	// now := chi.URLParam(r, )
+	// date :=
+	// repeat :=
+	// now, date, repeat := func(w http.ResponseWriter, r *http.Request) (time.Time, string, string) {
+
+	// }
+	// r.Handle("api/nextdate", NextDate(now, date, repeat))
+	r.Get("/api/nextdate", handleNextDate)
 
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatal(err)
