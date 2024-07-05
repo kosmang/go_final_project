@@ -9,7 +9,7 @@ import (
 	"time"
 )
 
-type Response struct {
+type ResponseDate struct {
 	NextDate string // `json:"next_date,omitempty"`
 	Error    string // `json:"error,omitempty"`
 }
@@ -18,17 +18,15 @@ func handleNextDate(w http.ResponseWriter, r *http.Request) {
 	nowStr := r.FormValue("now")
 	date := r.FormValue("date")
 	repeat := r.FormValue("repeat")
-	// w.Write([]byte(nowStr + date + repeat))
 
 	now, err := time.Parse("20060102", nowStr)
 	if err != nil {
 		http.Error(w, "Invalid now parameter", http.StatusBadRequest)
 		return
 	}
-	// w.Write([]byte(now.Format("20060102")))
 
 	nextDate, err := NextDate(now, date, repeat)
-	response := Response{}
+	response := ResponseDate{}
 	if err != nil {
 		response.Error = err.Error()
 	} else {
@@ -37,7 +35,7 @@ func handleNextDate(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Write([]byte(response.NextDate))
-	// w.Header().Set("Content-Type", "application/json")
+	// w.Header().Set("Content-Type", "application/json; charset=utf-8")
 	// if err := json.NewEncoder(w).Encode(response.NextDate); err != nil {
 	// 	http.Error(w, err.Error(), http.StatusInternalServerError)
 	// }
@@ -59,14 +57,14 @@ func NextDate(now time.Time, date string, repeat string) (string, error) {
 			return "", errors.New("invalid day interval")
 		}
 		for next := startDate; ; next = next.AddDate(0, 0, days) {
-			if next.After(startDate) && next.After(now) {
+			if next.After(now) {
 				return next.Format("20060102"), nil
 			}
 		}
 
 	case repeat == "y":
 		for next := startDate; ; next = next.AddDate(1, 0, 0) {
-			if next.After(startDate) && next.After(now) {
+			if next.After(now) {
 				return next.Format("20060102"), nil
 			}
 		}

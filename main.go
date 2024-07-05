@@ -11,6 +11,8 @@ import (
 	_ "modernc.org/sqlite"
 )
 
+var db *sql.DB
+
 func main() {
 	r := chi.NewRouter()
 	// Получение значения переменной окружения TODO_PORT
@@ -35,7 +37,7 @@ func main() {
 	_, err = os.Stat(dbFile)
 	install := os.IsNotExist(err)
 
-	db, err := sql.Open("sqlite", dbFile)
+	db, err = sql.Open("sqlite", dbFile)
 	if err != nil {
 		log.Fatal(err)
 		return
@@ -67,14 +69,8 @@ func main() {
 
 	fileServer := http.FileServer(http.Dir(webDir))
 	r.Handle("/*", fileServer)
-	// now := chi.URLParam(r, )
-	// date :=
-	// repeat :=
-	// now, date, repeat := func(w http.ResponseWriter, r *http.Request) (time.Time, string, string) {
-
-	// }
-	// r.Handle("api/nextdate", NextDate(now, date, repeat))
 	r.Get("/api/nextdate", handleNextDate)
+	r.Post("/api/task", handleTask)
 
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatal(err)
