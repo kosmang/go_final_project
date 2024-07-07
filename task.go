@@ -1,7 +1,9 @@
 package main
 
 import (
+	"database/sql"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -16,6 +18,111 @@ type task struct {
 	Title   string `json:"title"`
 	Comment string `json:"comment,omitempty"`
 	Repeat  string `json:"repeat,omitempty"`
+}
+
+func getTasks(w http.ResponseWriter, r *http.Request) {
+	// if r.Method != http.MethodGet {
+	// 	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
+	// 	return
+	// }
+
+	// search := r.URL.Query().Get("search")
+	// var tasks []map[string]string
+	// var rows *sql.Rows
+	// var err error
+
+	// if search != "" {
+	// 	search = "%" + strings.ToLower(search) + "%"
+	// 	rows, err = db.Query("SELECT id, date, title, comment, repeat FROM scheduler WHERE LOWER(title) LIKE ? OR LOWER(comment) LIKE ? ORDER BY date LIMIT 50", search, search)
+	// } else {
+	// 	rows, err = db.Query("SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date LIMIT 50")
+	// }
+
+	// if err != nil {
+	// 	http.Error(w, "Failed to query tasks: "+err.Error(), http.StatusInternalServerError)
+	// 	return
+	// }
+	// defer rows.Close()
+
+	// for rows.Next() {
+	// 	var id int
+	// 	var date, title, comment, repeat string
+	// 	err := rows.Scan(&id, &date, &title, &comment, &repeat)
+	// 	if err != nil {
+	// 		http.Error(w, "Failed to scan task: "+err.Error(), http.StatusInternalServerError)
+	// 		return
+	// 	}
+
+	// 	task := map[string]string{
+	// 		"id":      fmt.Sprint(id),
+	// 		"date":    date,
+	// 		"title":   title,
+	// 		"comment": comment,
+	// 		"repeat":  repeat,
+	// 	}
+	// 	tasks = append(tasks, task)
+	// }
+
+	// if tasks == nil {
+	// 	tasks = []map[string]string{}
+	// }
+
+	// w.Header().Set("Content-Type", "application/json")
+	// if err := json.NewEncoder(w).Encode(map[string]interface{}{"tasks": tasks}); err != nil {
+	// 	http.Error(w, "Failed to encode response: "+err.Error(), http.StatusInternalServerError)
+	// }
+	search := r.URL.Query().Get("search")
+	var tasks []map[string]string
+	var rows *sql.Rows
+	var err error
+
+	if search != "" {
+		if parsedDate, err := time.Parse("02.01.2006", search); err == nil {
+			// Если search соответствует формату даты
+			formattedDate := parsedDate.Format("20060102")
+			rows, err = db.Query("SELECT id, date, title, comment, repeat FROM scheduler WHERE date = ? ORDER BY date LIMIT 50", formattedDate)
+		} else {
+			// Поиск по заголовку или комментарию (регистронезависимо)
+			searchPattern := "%" + search + "%"
+			rows, err = db.Query("SELECT id, date, title, comment, repeat FROM scheduler WHERE title LIKE ? COLLATE NOCASE OR comment LIKE ? COLLATE NOCASE ORDER BY date LIMIT 50", searchPattern, searchPattern)
+		}
+	} else {
+		rows, err = db.Query("SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date LIMIT 50")
+	}
+
+	if err != nil {
+		http.Error(w, "Failed to query tasks: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id int
+		var date, title, comment, repeat string
+		err := rows.Scan(&id, &date, &title, &comment, &repeat)
+		if err != nil {
+			http.Error(w, "Failed to scan task: "+err.Error(), http.StatusInternalServerError)
+			return
+		}
+
+		task := map[string]string{
+			"id":      fmt.Sprint(id),
+			"date":    date,
+			"title":   title,
+			"comment": comment,
+			"repeat":  repeat,
+		}
+		tasks = append(tasks, task)
+	}
+
+	if tasks == nil {
+		tasks = []map[string]string{}
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(map[string]interface{}{"tasks": tasks}); err != nil {
+		http.Error(w, "Failed to encode response: "+err.Error(), http.StatusInternalServerError)
+	}
 }
 
 func handleTask(w http.ResponseWriter, r *http.Request) {
