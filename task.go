@@ -3,6 +3,7 @@ package main
 import (
 	"database/sql"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strconv"
@@ -13,64 +14,14 @@ import (
 )
 
 type task struct {
-	ID      int64  `json:"id,omitempty"`
+	ID      string `json:"id,omitempty"`
 	Date    string `json:"date"`
 	Title   string `json:"title"`
 	Comment string `json:"comment,omitempty"`
 	Repeat  string `json:"repeat,omitempty"`
 }
 
-func getTasks(w http.ResponseWriter, r *http.Request) {
-	// if r.Method != http.MethodGet {
-	// 	http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
-	// 	return
-	// }
-
-	// search := r.URL.Query().Get("search")
-	// var tasks []map[string]string
-	// var rows *sql.Rows
-	// var err error
-
-	// if search != "" {
-	// 	search = "%" + strings.ToLower(search) + "%"
-	// 	rows, err = db.Query("SELECT id, date, title, comment, repeat FROM scheduler WHERE LOWER(title) LIKE ? OR LOWER(comment) LIKE ? ORDER BY date LIMIT 50", search, search)
-	// } else {
-	// 	rows, err = db.Query("SELECT id, date, title, comment, repeat FROM scheduler ORDER BY date LIMIT 50")
-	// }
-
-	// if err != nil {
-	// 	http.Error(w, "Failed to query tasks: "+err.Error(), http.StatusInternalServerError)
-	// 	return
-	// }
-	// defer rows.Close()
-
-	// for rows.Next() {
-	// 	var id int
-	// 	var date, title, comment, repeat string
-	// 	err := rows.Scan(&id, &date, &title, &comment, &repeat)
-	// 	if err != nil {
-	// 		http.Error(w, "Failed to scan task: "+err.Error(), http.StatusInternalServerError)
-	// 		return
-	// 	}
-
-	// 	task := map[string]string{
-	// 		"id":      fmt.Sprint(id),
-	// 		"date":    date,
-	// 		"title":   title,
-	// 		"comment": comment,
-	// 		"repeat":  repeat,
-	// 	}
-	// 	tasks = append(tasks, task)
-	// }
-
-	// if tasks == nil {
-	// 	tasks = []map[string]string{}
-	// }
-
-	// w.Header().Set("Content-Type", "application/json")
-	// if err := json.NewEncoder(w).Encode(map[string]interface{}{"tasks": tasks}); err != nil {
-	// 	http.Error(w, "Failed to encode response: "+err.Error(), http.StatusInternalServerError)
-	// }
+func handleGetTasks(w http.ResponseWriter, r *http.Request) {
 	search := r.URL.Query().Get("search")
 	var tasks []map[string]string
 	var rows *sql.Rows
@@ -123,6 +74,35 @@ func getTasks(w http.ResponseWriter, r *http.Request) {
 	if err := json.NewEncoder(w).Encode(map[string]interface{}{"tasks": tasks}); err != nil {
 		http.Error(w, "Failed to encode response: "+err.Error(), http.StatusInternalServerError)
 	}
+}
+
+func handleGetTask(w http.ResponseWriter, r *http.Request) {
+	id := r.FormValue("id")
+	if id == "" {
+		http.Error(w, `{"error": "Не указан идентификатор"}`, http.StatusBadRequest)
+		return
+	}
+
+	task, err := getTaskByID(id)
+	if err != nil {
+		http.Error(w, `{"error": "Задача не найдена"}`, http.StatusNotFound)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(task)
+}
+
+func getTaskByID(id string) (task, error) {
+	var task task
+	// Perform a database query to fetch task details based on the ID
+	// Example query: SELECT * FROM scheduler WHERE id = ?
+	err := db.QueryRow("SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?", id).
+		Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
+	if err != nil {
+		return task, err
+	}
+	return task, nil
 }
 
 func handleTask(w http.ResponseWriter, r *http.Request) {
@@ -204,27 +184,31 @@ func handleTask(w http.ResponseWriter, r *http.Request) {
 	w.Write(jsonResponse)
 }
 
-func insertTask(t task) (int64, error) {
+func insertTask(t task) (string, error) {
 	stmt, err := db.Prepare("INSERT INTO scheduler (date, title, comment, repeat) VALUES (?, ?, ?, ?)")
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 	defer stmt.Close()
 
 	res, err := stmt.Exec(t.Date, t.Title, t.Comment, t.Repeat)
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 
 	id, err := res.LastInsertId()
 	if err != nil {
-		return 0, err
+		return "", err
 	}
 
-	return id, nil
+	return strconv.Itoa(int(id)), nil
 }
 
 func isValidRepeatRule(rule string) bool {
+	if rule == "" {
+		return true
+	}
+
 	if rule == "y" {
 		return true
 	}
@@ -238,4 +222,68 @@ func isValidRepeatRule(rule string) bool {
 	}
 
 	return false
+}
+
+func handleUpdateTask(w http.ResponseWriter, r *http.Request) {
+	var t task
+	err := json.NewDecoder(r.Body).Decode(&t)
+	if err != nil {
+		http.Error(w, `{"error": "Invalid JSON payload"}`, http.StatusBadRequest)
+		return
+	}
+	defer r.Body.Close()
+
+	// Validate task ID
+	if t.ID == "" {
+		http.Error(w, `{"error": "Invalid task ID"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Validate date format
+	_, err = time.Parse("20060102", t.Date)
+	if err != nil {
+		http.Error(w, `{"error": "Invalid date format"}`, http.StatusBadRequest)
+		return
+	}
+
+	// Validate and update task in the database
+	err = updateTask(t)
+	if err != nil {
+		http.Error(w, `{"error": "Задача не найдена"}`, http.StatusNotFound)
+		return
+	}
+
+	// Return success response
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{}`))
+}
+
+// Функция для обновления задачи в базе данных
+func updateTask(t task) error {
+	tempID, err := strconv.Atoi(t.ID)
+	if err != nil {
+		return errors.New(`{"error": "cannot conversation to int64"}`)
+	}
+	if !isValidRepeatRule(t.Repeat) {
+		return errors.New("")
+	}
+	if t.Title == "" {
+		return errors.New(`{"error": "Не указан заголовок задачи"}`)
+	}
+	result, err := db.Exec("UPDATE scheduler SET title=?, comment=?, repeat=?, date=? WHERE id=?",
+		t.Title, t.Comment, t.Repeat, t.Date, tempID)
+	if err != nil {
+		return err
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return err
+	}
+
+	if rowsAffected == 0 {
+		return sql.ErrNoRows
+	}
+
+	return nil
 }

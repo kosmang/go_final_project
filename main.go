@@ -70,8 +70,10 @@ func main() {
 	fileServer := http.FileServer(http.Dir(webDir))
 	r.Handle("/*", fileServer)
 	r.Get("/api/nextdate", handleNextDate)
-	r.Get("/api/tasks", getTasks)
+	r.Get("/api/tasks", handleGetTasks)
+	r.Get("/api/task", handleGetTask)
 	r.Post("/api/task", handleTask)
+	r.Put("/api/task", handleUpdateTask)
 
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatal(err)
