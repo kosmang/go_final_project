@@ -15,10 +15,8 @@ var db *sql.DB
 
 func main() {
 	r := chi.NewRouter()
-	// Получение значения переменной окружения TODO_PORT
 	port := os.Getenv("TODO_PORT")
 	if port == "" {
-		// Если переменная окружения не установлена, использовать порт по умолчанию
 		port = "7540"
 	}
 
@@ -44,8 +42,6 @@ func main() {
 	}
 	defer db.Close()
 
-	// если install равен true, после открытия БД требуется выполнить
-	// sql-запрос с CREATE TABLE и CREATE INDEX
 	if install {
 		createTable := `
 		CREATE TABLE IF NOT EXISTS scheduler(
@@ -64,16 +60,19 @@ func main() {
 		}
 	}
 
-	// Директория с веб-файлами
 	webDir := "./web"
-
 	fileServer := http.FileServer(http.Dir(webDir))
 	r.Handle("/*", fileServer)
+
 	r.Get("/api/nextdate", handleNextDate)
+
 	r.Get("/api/tasks", handleGetTasks)
 	r.Get("/api/task", handleGetTask)
 	r.Post("/api/task", handleTask)
 	r.Put("/api/task", handleUpdateTask)
+
+	r.Post("/api/task/done", handleTaskDone)
+	r.Delete("/api/task", handleTaskDelete)
 
 	if err := http.ListenAndServe(":"+port, r); err != nil {
 		log.Fatal(err)

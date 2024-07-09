@@ -95,8 +95,6 @@ func handleGetTask(w http.ResponseWriter, r *http.Request) {
 
 func getTaskByID(id string) (task, error) {
 	var task task
-	// Perform a database query to fetch task details based on the ID
-	// Example query: SELECT * FROM scheduler WHERE id = ?
 	err := db.QueryRow("SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?", id).
 		Scan(&task.ID, &task.Date, &task.Title, &task.Comment, &task.Repeat)
 	if err != nil {
@@ -233,32 +231,27 @@ func handleUpdateTask(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	// Validate task ID
 	if t.ID == "" {
 		http.Error(w, `{"error": "Invalid task ID"}`, http.StatusBadRequest)
 		return
 	}
 
-	// Validate date format
 	_, err = time.Parse("20060102", t.Date)
 	if err != nil {
 		http.Error(w, `{"error": "Invalid date format"}`, http.StatusBadRequest)
 		return
 	}
 
-	// Validate and update task in the database
 	err = updateTask(t)
 	if err != nil {
 		http.Error(w, `{"error": "Задача не найдена"}`, http.StatusNotFound)
 		return
 	}
 
-	// Return success response
 	w.Header().Set("Content-Type", "application/json")
 	w.Write([]byte(`{}`))
 }
 
-// Функция для обновления задачи в базе данных
 func updateTask(t task) error {
 	tempID, err := strconv.Atoi(t.ID)
 	if err != nil {
@@ -286,4 +279,66 @@ func updateTask(t task) error {
 	}
 
 	return nil
+}
+
+func handleTaskDone(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, `{"error": "Не указан идентификатор"}`, http.StatusBadRequest)
+		return
+	}
+
+	var t task
+	err := db.QueryRow("SELECT id, date, title, comment, repeat FROM scheduler WHERE id = ?", id).Scan(&t.ID, &t.Date, &t.Title, &t.Comment, &t.Repeat)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, `{"error": "Задача не найдена"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error": "Ошибка запроса к базе данных"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	if t.Repeat == "" {
+		_, err = db.Exec("DELETE FROM scheduler WHERE id = ?", id)
+	} else {
+		nextDate, err := NextDate(time.Now(), t.Date, t.Repeat)
+		if err != nil {
+			http.Error(w, `{"error": "Ошибка определения следующей даты выполнения задачи"}`, http.StatusInternalServerError)
+			return
+		}
+		_, err = db.Exec("UPDATE scheduler SET date = ? WHERE id = ?", nextDate, id)
+	}
+	if err != nil {
+		http.Error(w, `{"error": "Ошибка обновления задачи"}`, http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{}`))
+}
+
+func handleTaskDelete(w http.ResponseWriter, r *http.Request) {
+	id := r.URL.Query().Get("id")
+	if id == "" {
+		http.Error(w, `{"error": "Не указан идентификатор"}`, http.StatusBadRequest)
+		return
+	}
+	if _, err := strconv.Atoi(id); err != nil {
+		http.Error(w, `{"error": "Некорректный идентификатор"}`, http.StatusBadRequest)
+		return
+	}
+
+	_, err := db.Exec("DELETE FROM scheduler WHERE id = ?", id)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			http.Error(w, `{"error": "Задача не найдена"}`, http.StatusNotFound)
+		} else {
+			http.Error(w, `{"error": "Ошибка удаления задачи"}`, http.StatusInternalServerError)
+		}
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write([]byte(`{}`))
 }
