@@ -219,6 +219,50 @@ func isValidRepeatRule(rule string) bool {
 		return true
 	}
 
+	if strings.HasPrefix(rule, "w ") {
+		daysOfWeekStr := strings.TrimPrefix(rule, "w ")
+		daysOfWeekArr := strings.Split(daysOfWeekStr, ",")
+		for _, dayStr := range daysOfWeekArr {
+			day, err := strconv.Atoi(dayStr)
+			if err != nil || day < 1 || day > 7 {
+				return false
+			}
+		}
+		return true
+	}
+
+	if strings.HasPrefix(rule, "m ") {
+		parts := strings.Split(strings.TrimPrefix(rule, "m "), " ")
+		if len(parts) == 0 || len(parts) > 2 {
+			return false
+		}
+
+		daysStr := parts[0]
+		monthsStr := ""
+		if len(parts) > 1 {
+			monthsStr = parts[1]
+		}
+
+		daysArr := strings.Split(daysStr, ",")
+		for _, dayStr := range daysArr {
+			day, err := strconv.Atoi(dayStr)
+			if err != nil || (day < -2 || (day == 0)) || day > 31 {
+				return false
+			}
+		}
+
+		if monthsStr != "" {
+			monthsArr := strings.Split(monthsStr, ",")
+			for _, monthStr := range monthsArr {
+				month, err := strconv.Atoi(monthStr)
+				if err != nil || month < 1 || month > 12 {
+					return false
+				}
+			}
+		}
+		return true
+	}
+
 	return false
 }
 
